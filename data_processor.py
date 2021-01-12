@@ -233,8 +233,9 @@ class DataMriSegmentation(data.Dataset):
 
         if self.mask == 'seg':
             # binarising cortical structures
-            seg[seg < 1000] = 0
-            seg[seg > 1000] = 1
+            # GET RID OF CONSTANT
+            seg[seg < 900] = 0
+            seg[seg >= 900] = 1
             return torch.from_numpy(img).float(), torch.from_numpy(seg).float()
 
         elif self.mask == 'bb':
@@ -246,8 +247,9 @@ class DataMriSegmentation(data.Dataset):
 
         elif self.mask == 'combined':
             # binarising cortical structures
-            seg[seg < 1000] = 0
-            seg[seg > 1000] = 1
+            # GET RID OF CONSTANT
+            seg[seg < 900] = 0
+            seg[seg >= 900] = 1
 
             # preparing bounding box mask 
             bb_mask_path = self.img_mask[index]
