@@ -25,6 +25,8 @@ from torchio.transforms import (
 )
 
 import torch
+import numpy as np
+from unet import UNet
 import multiprocessing
 
 
@@ -169,6 +171,55 @@ def get_loaders(data, cv_split,
     return training_loader, validation_loader
 
 
+def get_model_and_optimizer(device, 
+                            num_encoding_blocks = 3,
+                            out_channels_first_layer = 16,
+                            patience = 3):
+    
+    '''
+    Function creates model, optimizer and scheduler
+    
+    Arguments:
+     * device (cpu or gpu): device on which calculation will be done 
+     * num_encoding_blocks (int): number of encoding blocks, which consist of con3d + ReLU + conv3d + ReLu
+     * out_channels_first_layer (int) : number of channels after first encoding block
+     * patience (int): Number of epochs with no improvement after which learning rate will be reduced.
+     
+    Output:
+     * model 
+     * optimizer
+     * scheduler
+    '''
+    
+    # reproducibility
+    # https://pytorch.org/docs/stable/notes/randomness.html
+    torch.manual_seed(0)
+    np.random.seed(0)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    #https://segmentation-models.readthedocs.io/en/latest/tutorial.html
+    model = UNet(
+        in_channels = 1,
+        out_classes = 2,
+        dimensions = 3,
+        num_encoding_blocks = num_encoding_blocks,
+        out_channels_first_layer = out_channels_first_layer,
+        normalization = 'batch',
+        upsampling_type = 'linear',
+        padding = True,
+        activation = 'PReLU',
+    ).to(device)
+    
+    optimizer = torch.optim.AdamW(model.parameters())
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                           mode = 'min',
+                                                           factor = 0.1,
+                                                           patience = patience,
+                                                           threshold = 0.01)
+    
+    return model, optimizer, scheduler
+
 def prepare_batch(batch, device):
     """
     Function loads *nii.gz files, sending to the devise.
@@ -184,7 +235,7 @@ def prepare_batch(batch, device):
     """
     inputs = batch['MRI'][DATA].to(device)
     targets = batch['LABEL'][DATA]
-    targets[0][0][(np.isin(targets[0][0], LIST_FCD))] = 1 # take only areas of gray matter from FreeSurfer atlas
+    targets[0][0][(np.isin(targets[0][0], LIST_FCD))] = 1 # WHAT!??
     targets[targets >= 900] = 1
     targets[targets != 1] = 0
     targets = targets.to(device)   
