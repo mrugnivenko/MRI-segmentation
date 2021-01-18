@@ -1,24 +1,30 @@
+'''
+Description of the following fucntions:
+    * get_dice_score
+    * get_dice_loss
+'''
+
 import torch
 
 def get_dice_score(output, target, SPATIAL_DIMENSIONS = (2, 3, 4), epsilon = 1e-9):
     '''
-    WORKS ONLY IF BATCH_SIZE = 1, I WILL IMPROVE IT LSTER
-    
-    Function get dice score on output and target tensors  
+    Function gets dice score on output and target tensors  
     https://www.jeremyjordan.me/semantic-segmentation/#loss
     
     Arguments:
-        * output (torch.tensor):  (1,2,X,Y,Z) probabilities tensor, one component 
+        * output (torch.tensor): (1,2,X,Y,Z) probabilities tensor, one component 
         is probability-tensor (1,X,Y,Z) to be the brain, another component 
-        is probability-tensor (1,X,Y,Z) to be background.
+        is probability-tensor (1,X,Y,Z) to be background. 
+        In general the shape of the tensor is (N, 2, X, Y, Z), where N is batch size
         * target (torch.tensor): (1,2,X,Y,Z)  binary tensor, one component 
         is binary-mask (1,X,Y,Z) for the brain, another component 
         is binary-mask (1,X,Y,Z) for the background.
+        In general the shape of the tensor is (N, 2, X, Y, Z), where N is batch size
         * SPATIAL_DIMENSIONS (typle): typle with indexes corresponding to spatial parts of tensors
         * epsilon (float): a small number used for numerical stability to avoid divide by zero errors  
     
     Outputs:
-        * dice score (torch.tensor): dice score 
+        * dice score (torch.tensor): tensor with dice score for every class on the image 
     '''
     
     p0 = output
@@ -37,21 +43,22 @@ def get_dice_score(output, target, SPATIAL_DIMENSIONS = (2, 3, 4), epsilon = 1e-
     
     return dice_score
 
+
 def get_dice_loss(output, target):
     '''
-    WORKS ONLY IF BATCH_SIZE = 1, I WILL IMPROVE IT LSTER
-    
-    Function get dice score loss on output and target tensors  
+    Function gets dice score loss on output and target tensors  
     
     Arguments:
         * output (torch.tensor):  (1,2,X,Y,Z) probabilities tensor, one component 
         is probability-tensor (1,X,Y,Z) to be the brain, another component 
         is probability-tensor (1,X,Y,Z) to be background.
+        In general the shape of the tensor is (N, 2, X, Y, Z), where N is batch size
         * target (torch.tensor): (1,2,X,Y,Z) binary tensor, one component 
         is binary-mask (1,X,Y,Z) for the brain, another component 
         is binary-mask (1,X,Y,Z) for the background.
+        In general the shape of the tensor is (N, 2, X, Y, Z), where N is batch size
     
     Outputs:
-        * dice score loss (torch.tensor): 1 - dice score 
+        * dice score loss (torch.tensor): tensor with dice score loss for every class on the image 
     '''
     return 1 - get_dice_score(output, target)
