@@ -1,7 +1,14 @@
-import matplotlib.pyplot as plt
+'''
+Description of the following fucntions:
+    * plot_central_cuts
+    * plot_certain_cuts
+    * get_center_coord_of_bb
+'''
+
 import torch
-import numpy as np
 import nibabel
+import numpy as np
+import matplotlib.pyplot as plt
 
 def plot_central_cuts(img, label = False):
     
@@ -10,6 +17,7 @@ def plot_central_cuts(img, label = False):
     
     Arguments:
         * img (torch.Tensor): MR image (1xDxHxW)
+        * label (str or False): name of object for which we plot slices, e.g 'brain' or 'bb'
     
     Output:
         * picture of central slices of MRI
@@ -40,7 +48,7 @@ def plot_central_cuts(img, label = False):
 def plot_certain_cuts(img, coordinates, object_):
     
     """
-    Function plots central slices of MRI
+    Function plots certain slices of MRI
     
     Arguments:
         * img (torch.Tensor): MR image (1xDxHxW)
@@ -75,13 +83,14 @@ def plot_certain_cuts(img, coordinates, object_):
 def get_center_coord_of_bb(img):
     
     '''
-    Function finds central coordinates of bb
+    Function finds central coordinates of bb. Probably I will create more informative function based on this one later
     
     Arguments:
         * img (torch.Tensor): MR image (1xDxHxW)
         
     Output:
-        * sagital_center_coord, coronal_center_coord, axial_center_coord (int): corresponding central   coordinates of bb 
+        * sagital_center_coord, coronal_center_coord, axial_center_coord (int): 
+        corresponding central coordinates of bb 
     '''
     
     if isinstance(img, torch.Tensor):
