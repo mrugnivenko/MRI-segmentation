@@ -1,16 +1,24 @@
+'''
+Description of the following functions:
+    * load_nii_to_array
+    * crope_image
+    * get_targets_info
+    
+Also description of class DataMriSegmentation
+'''
+
 import os
 import glob
-from tqdm import tqdm
-
-import pandas as pd
-pd.options.mode.chained_assignment = None  # default='warn' 
-# Ignoring SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame
-
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
 import nibabel as nib
+pd.options.mode.chained_assignment = None 
 from sklearn.preprocessing import LabelEncoder
+
 import torch
 import torch.utils.data as data
+
 
 def load_nii_to_array(nii_path):
     
@@ -21,12 +29,12 @@ def load_nii_to_array(nii_path):
         * nii_path (str): path to *.nii file with data
 
     Output:
-        * result (np.array): data obtained from nii_path
+        * data (np.array): data obtained from nii_path
     """
     
     try:
-        result = np.asanyarray(nib.load(nii_path).dataobj)
-        return (result)
+        data = np.asanyarray(nib.load(nii_path).dataobj)
+        return (data)
     
     except OSError:
         print(FileNotFoundError(f'No such file or no access: {nii_path}'))
@@ -39,7 +47,7 @@ def crope_image(img, coord_min, img_shape):
     
     Arguments:
         * img (np.array): MR image
-        * coord_min (x_min, y_min, z_min):  the most bottom coordinate
+        * coord_min (x_min, y_min, z_min):  It will be (0, 0, 0) point in cropped image
         * img_shape (x_shape, y_shape, z_shape): desired image shape
 
     Output:
@@ -71,20 +79,19 @@ def get_targets_info(sample,
     Walks through directories and completes DataFrame, according to targets.
     
     Arguments:
-        * targets_path (str): path to DataFrame with all the information about MR images.
+        * targets_path (str): path to DataFrame with all the information about MR images
         * sample (str): name of the medical center with images from which we want to work, 'all' for whole centers
-        * prefix (str): patient name prefix (optional). In case we want to work e.g only with fcd or no_fcd patients.
-        * mask_path (str or False): paths to mask folders 
+        * prefix (str): patient name prefix (optional). E.g 'fcd' means taht we want to work only with fcd patients
+        * mask_path (str or False): paths to folder with masks
         * image_path (str): path to nii.gz files with MR data
-        * data_type (str or False): str - 'img' or'seg'. If e.g data_type = 'img' - only MR image is used for model.
-        'img' or 'seg' are using in classification, in segmentation data_type = False, since we want to have both. 
-        * ignore_missing (bool): whther we want to remove examples with missing data or not.
+        * data_type (str or False): str = {'img', 'seg'}. If e.g data_type = 'img' - only MR image is used for model.
+        'img' or 'seg' are using in classification, in segmentation data_type = False, since we want to have both 
+        * ignore_missing (bool): whether we want to remove examples with missing data or not
     
     Outputs:
         * files: DataFrame with all the information about targets, which are needed for our task
         (including paths to MRI and to file with ground truth segmentation)
     '''
-    
     
     description_of_targets = pd.read_csv(targets_path, index_col = 0)
     '''
@@ -95,7 +102,7 @@ def get_targets_info(sample,
         * age: ages of patients, whose MR images we have
         * gender: gender of patients, whose MR images we have
         * scan: . To be honest don't know 
-        * detection: ['mri_positive', 'mri_negative', nan, 'mri_positive/mri_negative']. To be honest don't know
+        * detection: ['mri_positive', 'mri_negative', nan, 'mri_positive/mri_negative']. Whether doctors found FCD using MRI or not
         * comments: [nan,  0.,  3.,  2.,  1.]. To be honest don't know
     '''
     
@@ -164,27 +171,17 @@ def get_targets_info(sample,
 
     return files, label_encoder
 
-
-"""
-data.Dataset is an abstract class representing a :class:`Dataset`.
-
-All datasets that represent a map from keys to data samples should subclass
-it. All subclasses should overwrite :meth:`__getitem__`, supporting fetching a
-data sample for a given key. Subclasses could also optionally overwrite
-:meth:`__len__`.
-"""
-
 class DataMriSegmentation(data.Dataset):
     
     """
     Arguments:
-        image_path (str): paths to data folders  
-        mask_path (str): paths to mask folders  
-        prefix (str): patient name prefix (optional)
-        sample (str): subset of the data, 'all' for whole sample
-        targets_path (str): targets file path
-        if ignore_missing (bool): delete subject if the data partially missing
-        mask (string): ['seg', 'bb', 'combined']    
+        image_path (str): path to nii.gz files with MR data  
+        mask_path (str): paths to folder with masks 
+        prefix (str): patient name prefix (optional). E.g 'fcd' means taht we want to work only with fcd patients
+        sample (str): name of the medical center with images from which we want to work, 'all' for whole centers
+        targets_path (str): path to DataFrame with all the information about MR images
+        ignore_missing (bool): whether we want to remove examples with missing data or not
+        mask (string): ['seg', 'bb', 'combined']. Type of mask to use in task   
     """
     
     def __init__(self, sample,
