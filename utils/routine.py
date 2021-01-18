@@ -1,8 +1,9 @@
 '''
-If you use TorchIO for your research, please cite the following paper:
-Pérez-García et al., TorchIO: a Python library for efficient loading,
-preprocessing, augmentation and patch-based sampling of medical images
-in deep learning. Credits instructions: https://torchio.readthedocs.io/#credits
+    Code adapted from: https://github.com/fepegar/torchio#credits
+
+        Credit: Pérez-García et al., 2020, TorchIO: 
+        a Python library for efficient loading, preprocessing, 
+        augmentation and patch-based sampling of medical images in deep learning.
 '''
 
 import torchio
@@ -25,31 +26,46 @@ from torchio.transforms import (
 )
 
 import torch
-import numpy as np
+import torch.nn.functional as F
 from unet import UNet
-import multiprocessing
 
+import numpy as np
+import multiprocessing
+import enum
+import warnings
+from tqdm import tqdm_notebook, tqdm
+
+import imp 
+import utils.metrics as metrics
+imp.reload(metrics)
+from utils.metrics import *
 
 device = torch.device('cuda') if torch.cuda.is_available() else 'cpu'
 
+# WHAT???
 LIST_FCD =  [ 8,   10,   11,   12,   13,    16,   17,   18,  26,  47, 49,   50, 
   51,   52,   53,   54,   58,  85,  251,  252,  253,  254,  255]
 
+# We work with torch.tensor with 5 dimension, so its shape e.g (1,1,200,200,200)
+BATCH_DIMENSION = 0
+CHANNELS_DIMENSION = 1
+SPATIAL_DIMENSIONS = 2, 3, 4
 
 
 def get_torchio_dataset(inputs, targets, transform):
+    
     """
-    Function creates a dataset from data from inputs and targets lists and applies transform to that dataset
+    Function creates a torchio.SubjectsDataset from inputs and targets lists and applies transform to that dataset
     
     Arguments:
         * inputs (list): list of paths to MR images
-        * targets (list):  list of paths to segmentation of MR images
-        * transform (False/torchio.transforms.augmentation.composition.Compose): transformation which will be applied to MR images
+        * targets (list):  list of paths to ground truth segmentation of MR images
+        * transform (False/torchio.transforms): transformations which will be applied to MR images and ground truth segmentation of MR images
     
     Output:
-        * datasets (list): torchio.data.dataset.SubjectsDataset of torchio.data.subject.Subject entities
-
+        * datasets (torchio.SubjectsDataset): it's kind of torchio list of torchio.data.subject.Subject entities
     """
+    
     subjects = []
     for (image_path, label_path) in zip(inputs, targets ):
         subject_dict = {
@@ -64,7 +80,7 @@ def get_torchio_dataset(inputs, targets, transform):
     elif not transform:
         dataset = torchio.SubjectsDataset(subjects)
     
-    return  dataset
+    return dataset
 
 def get_loaders(data, cv_split,
         training_transform = False,
@@ -241,3 +257,57 @@ def prepare_batch(batch, device):
     targets = targets.to(device)   
     
     return inputs, targets
+
+def forward(model, input_):
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        logits = model(input_)
+    return logits
+
+class Action(enum.Enum):
+    TRAIN = 'Training'
+    VALIDATE = 'Validation'
+
+def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, experiment = False):
+    
+    '''
+    Function 
+    
+    Arguments:
+    
+    Output:
+    '''
+
+    is_training = (action == Action.TRAIN)
+    epoch_losses = []
+    model.train(is_training) #Sets the module in training mode if is_training = True
+    
+    for batch_idx, batch in enumerate(tqdm(loader)):
+        inputs, targets = prepare_batch(batch, device)
+        optimizer.zero_grad()
+        
+        with torch.set_grad_enabled(is_training):
+            logits = forward(model, inputs)
+            probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
+            batch_losses = get_dice_loss(probabilities, targets)
+#             batch_loss = batch_losses.mean()
+            batch_loss = batch_losses
+            
+            if is_training:
+                batch_loss.backward()
+                optimizer.step()
+        
+            epoch_losses.append(batch_loss.item())
+           
+#             if experiment:
+#                 if action == Action.TRAIN:
+#                     experiment.log_metric("train_dice_loss", batch_loss.item())
+#                 elif action == Action.VALIDATE:
+#                     experiment.log_metric("validate_dice_loss", batch_loss.item())
+                    
+            del inputs, targets, logits, probabilities, batch_losses
+ 
+    epoch_losses = np.array(epoch_losses)
+    
+    return epoch_losses 
+

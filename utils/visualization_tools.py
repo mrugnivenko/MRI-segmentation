@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import nibabel
 
-def plot_central_cuts(img):
+def plot_central_cuts(img, label = False):
     
     """
     Function plots central slices of MRI
@@ -25,6 +25,8 @@ def plot_central_cuts(img):
    
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(3 * 4, 4))
     fig.suptitle('Central cuts', fontsize=16)
+    if label:
+        fig.suptitle(f'Central cuts of {label}', fontsize=16)
     
     axes[0].imshow(img[ img.shape[0] // 2, :, :], cmap = 'gray')
     axes[0].set_title(f'coordinate sagital = {img.shape[0] // 2}')
