@@ -29,11 +29,14 @@ import torch
 import torch.nn.functional as F
 from unet import UNet
 
-import numpy as np
-import multiprocessing
+import time
 import enum
 import warnings
+import numpy as np
+import multiprocessing
+import matplotlib.pyplot as plt
 from tqdm import tqdm_notebook, tqdm
+from IPython.display import clear_output
 
 import imp 
 import utils.metrics as metrics
@@ -254,9 +257,11 @@ def prepare_batch(batch, device):
     targets[0][0][(np.isin(targets[0][0], LIST_FCD))] = 1 # WHAT!??
     targets[targets >= 900] = 1
     targets[targets != 1] = 0
-    targets = targets.to(device)   
+    targets_2_dim = torch.stack((targets[0][0] , 1 - targets[0][0])) #WORKS ONLY IF BATCH_SIZE = 1
+    targets_2_dim = targets_2_dim.unsqueeze(0)
+    targets_2_dim = targets_2_dim.to(device)   
     
-    return inputs, targets
+    return inputs, targets_2_dim
 
 def forward(model, input_):
     with warnings.catch_warnings():
@@ -290,8 +295,8 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
             logits = forward(model, inputs)
             probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
             batch_losses = get_dice_loss(probabilities, targets)
-#             batch_loss = batch_losses.mean()
-            batch_loss = batch_losses
+            batch_loss = batch_losses.mean()
+
             
             if is_training:
                 batch_loss.backward()
@@ -299,11 +304,11 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
         
             epoch_losses.append(batch_loss.item())
            
-#             if experiment:
-#                 if action == Action.TRAIN:
-#                     experiment.log_metric("train_dice_loss", batch_loss.item())
-#                 elif action == Action.VALIDATE:
-#                     experiment.log_metric("validate_dice_loss", batch_loss.item())
+            if experiment:
+                if action == Action.TRAIN:
+                    experiment.log_metric("train_dice_loss", batch_loss.item())
+                elif action == Action.VALIDATE:
+                    experiment.log_metric("validate_dice_loss", batch_loss.item())
                     
             del inputs, targets, logits, probabilities, batch_losses
  
@@ -311,3 +316,48 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
     
     return epoch_losses 
 
+def train(num_epochs, training_loader, validation_loader, model, optimizer, scheduler,
+          weights_stem, save_epoch= 1, experiment= False, verbose = True):
+    
+    '''
+    '''
+    
+    start_time = time.time()
+    epoch_train_loss, epoch_val_loss = [], []
+    
+    run_epoch(0, Action.VALIDATE, validation_loader, model, optimizer, scheduler, experiment)
+    
+    for epoch_idx in range(1, num_epochs + 1):
+        
+        epoch_train_losses = run_epoch(epoch_idx, Action.TRAIN, training_loader, 
+                                       model, optimizer, scheduler, experiment)
+        epoch_val_losses = run_epoch(epoch_idx, Action.VALIDATE, validation_loader, 
+                                     model, optimizer, scheduler, experiment)
+        
+        # 4. Print metrics
+        if verbose:
+            clear_output(True)
+            print("Epoch {} of {} took {:.3f}s".format(epoch_idx, num_epochs, time.time() - start_time))
+            print("  training loss (in-iteration): \t{:.6f}".format(epoch_train_losses[-1]))
+            print("  validation loss: \t\t\t{:.6f}".format(epoch_val_losses[-1]))    
+        
+        epoch_train_loss.append(np.mean(epoch_train_losses))
+        epoch_val_loss.append(np.mean(epoch_val_losses))
+        
+        # 5. Plot metrics
+        if verbose:
+            plt.figure(figsize=(10, 5))
+            plt.plot(epoch_train_loss, label='train')
+            plt.plot(epoch_val_loss, label='val')
+            plt.xlabel('epoch')
+            plt.ylabel('loss')
+            plt.legend()
+            plt.show()
+        
+        if scheduler:     
+            scheduler.step(np.mean(epoch_val_losses))
+        if experiment:
+            experiment.log_epoch_end(epoch_idx)
+        if (epoch_idx% save_epoch == 0):
+            torch.save(model.state_dict(), f'weights/{weights_stem}_epoch_{epoch_idx}.pth')
+            
