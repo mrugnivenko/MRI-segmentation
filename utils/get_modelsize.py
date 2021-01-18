@@ -1,3 +1,8 @@
+'''
+Description of class for estimating the size of PyTorch models in memory for a given input size
+Copied from https://github.com/jacobkimmel/pytorch_modelsize
+'''
+
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
