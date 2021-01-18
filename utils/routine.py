@@ -1,28 +1,31 @@
 '''
-    Code adapted from: https://github.com/fepegar/torchio#credits
+Description of the following fucntions:
+    * get_torchio_dataset
+    * get_loaders
+    * get_model_and_optimizer
+    * prepare_batch
+    * forward
+    * run_epoch
+    * train
 
-        Credit: Pérez-García et al., 2020, TorchIO: 
-        a Python library for efficient loading, preprocessing, 
-        augmentation and patch-based sampling of medical images in deep learning.
+Code adapted from: https://github.com/fepegar/torchio#credits
+
+    Credit: Pérez-García et al., 2020, TorchIO: 
+    a Python library for efficient loading, preprocessing, 
+    augmentation and patch-based sampling of medical images in deep learning.
 '''
 
 import torchio
 from torchio import AFFINE, DATA, PATH, TYPE, STEM
 from torchio.transforms import (
-    RandomFlip,
-    RandomAffine,
+    RandomFlip, RandomAffine,
     RandomElasticDeformation,
-    RandomNoise,
-    RandomMotion,
-    RandomBiasField,
-    RescaleIntensity,
-    Resample,
-    ToCanonical,
-    ZNormalization,
-    CropOrPad,
+    RandomNoise, RandomMotion,
+    RandomBiasField, RescaleIntensity,
+    Resample, ToCanonical,
+    ZNormalization, CropOrPad,
     HistogramStandardization,
-    OneOf,
-    Compose,
+    OneOf, Compose,
 )
 
 import torch
@@ -63,7 +66,7 @@ def get_torchio_dataset(inputs, targets, transform):
     Arguments:
         * inputs (list): list of paths to MR images
         * targets (list):  list of paths to ground truth segmentation of MR images
-        * transform (False/torchio.transforms): transformations which will be applied to MR images and ground truth segmentation of MR images
+        * transform (False/torchio.transforms): transformations which will be applied to MR images and ground truth segmentation of MR images (but not all of them)
     
     Output:
         * datasets (torchio.SubjectsDataset): it's kind of torchio list of torchio.data.subject.Subject entities
@@ -85,29 +88,23 @@ def get_torchio_dataset(inputs, targets, transform):
     
     return dataset
 
-def get_loaders(data, cv_split,
-        training_transform = False,
-        validation_transform = False,
-        patch_size = 64,
-        patches = False,
-        samples_per_volume = 6,
-        max_queue_length = 180,
-        training_batch_size = 1,
-        validation_batch_size = 1,
-        mask = False):
+def get_loaders(data, cv_split, training_transform = False,
+        validation_transform = False, patch_size = 64,
+        patches = False, samples_per_volume = 6,
+        max_queue_length = 180, training_batch_size = 1,
+        validation_batch_size = 1, mask = False):
     
     """
     Function creates dataloaders 
     
     Arguments:
-        * data (data_processor.DataMriSegmentation): dataset
+        * data (data_processor.DataMriSegmentation): torchio dataset
         * cv_split (list): list of two arrays, one with train indexes, other with test indexes
-        * training_transform (bool/torchio.transforms.augmentation.composition.Compose): whether or not to 
-        use transform for training images
-        * validation_transform (bool/torchio.transforms.augmentation.composition.Compose): whether or not to 
-        use  transform for validation images
+        * training_transform (bool/torchio.transforms): whether or not to use transform for training images
+        * validation_transform (bool/torchio.transforms): whether or not to use  transform for validation images
         * patch_size (int): size of patches
         * patches (bool): if True, than patch-based training will be applied
+        https://niftynet.readthedocs.io/en/dev/window_sizes.html - about patch based training
         * samples_per_volume (int): number of patches to extract from each volume
         * max_queue_length (int): maximum number of patches that can be stored in the queue
         * training_batch_size (int): size of batches for training
@@ -240,9 +237,11 @@ def get_model_and_optimizer(device,
     return model, optimizer, scheduler
 
 def prepare_batch(batch, device):
+    
     """
-    Function loads *nii.gz files, sending to the devise.
-    For the LABEL in binarises the data.
+    WORK ONLY WITH BATCH SIZE = 1, I WILL IMPROVE IT LATER
+    Function sends MRI data to the devise. Binarizes LABEL, creates tensor of shape (1, 2, X, Y, Z) for further calculation of the dice score and
+    also sends it ti the devise
     
     Arguments:
         * batch (dict): batch dict, contains input data and target data
@@ -252,10 +251,11 @@ def prepare_batch(batch, device):
         * inputs (torch.tensor): inputs in the appropriate format for model 
         * targets (torch.tensor): targets in the appropriate format for model 
     """
+    
     inputs = batch['MRI'][DATA].to(device)
     targets = batch['LABEL'][DATA]
     targets[0][0][(np.isin(targets[0][0], LIST_FCD))] = 1 # WHAT!??
-    targets[targets >= 900] = 1
+    targets[targets >= 900] = 1 #GET RID OF CONCSTANT
     targets[targets != 1] = 0
     targets_2_dim = torch.stack((targets[0][0] , 1 - targets[0][0])) #WORKS ONLY IF BATCH_SIZE = 1
     targets_2_dim = targets_2_dim.unsqueeze(0)
@@ -264,23 +264,44 @@ def prepare_batch(batch, device):
     return inputs, targets_2_dim
 
 def forward(model, input_):
+    '''
+    Function apply model to the input
+    
+    Arguments:
+        * model
+        * input_ (torch.tensor): (N, 1, X, Y, Z) batch with MRI data
+    
+    Output:
+        * logits (torch.tensor): (1, 2, X, Y, Z) probabilities tensor, one component 
+        is probability-tensor (1,X,Y,Z) to be the brain, another component 
+        is probability-tensor (1,X,Y,Z) to be background. 
+        In general the shape of the tensor is (N, 2, X, Y, Z), where N is batch size
+    '''
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning)
         logits = model(input_)
     return logits
 
 class Action(enum.Enum):
+    '''
+    Class used for understanding whether model has to perform training stage or testing
+    '''
+    
     TRAIN = 'Training'
     VALIDATE = 'Validation'
 
 def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, experiment = False):
     
     '''
-    Function 
+    Function runs one epoch with set parameters
     
     Arguments:
+        * epoch_idx (int): number of epoch
+        * action (Action.TRAIN or Action.VALIDATE): indicator whether model has to perform training stage or testing
+        * experiment (): experiment tool from Comet.ml
     
     Output:
+        * epoch_losses (np.array): list of losses of every batch
     '''
 
     is_training = (action == Action.TRAIN)
@@ -320,6 +341,14 @@ def train(num_epochs, training_loader, validation_loader, model, optimizer, sche
           weights_stem, save_epoch= 1, experiment= False, verbose = True):
     
     '''
+    Fucntion trains model with set parameters
+    
+    Arguments:
+        * num_epochs (int): number of epochs for training
+        * weights_stem (str): name for experiment logs
+        * save_epoch (int): how often save weights of model
+        * experiment (experiment variable ot False): name of Comet.ml variable for experiment
+        * verbose (bool): whether to print and plot results after epochs or not 
     '''
     
     start_time = time.time()
@@ -359,5 +388,4 @@ def train(num_epochs, training_loader, validation_loader, model, optimizer, sche
         if experiment:
             experiment.log_epoch_end(epoch_idx)
         if (epoch_idx% save_epoch == 0):
-            torch.save(model.state_dict(), f'weights/{weights_stem}_epoch_{epoch_idx}.pth')
-            
+            torch.save(model.state_dict(), f'weights/{weights_stem}_epoch_{epoch_idx}.pth')  
