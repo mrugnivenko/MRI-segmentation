@@ -29,6 +29,7 @@ from torchio.transforms import (
 )
 
 import torch
+import torch.nn as nn 
 import torch.nn.functional as F
 from unet import UNet
 
@@ -290,7 +291,7 @@ class Action(enum.Enum):
     TRAIN = 'Training'
     VALIDATE = 'Validation'
 
-def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, experiment = False):
+def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, experiment = False, loss_type = False):
     
     '''
     Function runs one epoch with set parameters
@@ -306,10 +307,12 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
 
     is_training = (action == Action.TRAIN)
     epoch_losses = []
+    ce_loss_func = nn.BCELoss()
     model.train(is_training) #Sets the module in training mode if is_training = True
     
     for batch_idx, batch in enumerate(tqdm(loader)):
         inputs, targets = prepare_batch(batch, device)
+        targets = targets.float()
         optimizer.zero_grad()
         
         with torch.set_grad_enabled(is_training):
@@ -317,8 +320,10 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
             probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
             batch_losses = get_dice_loss(probabilities, targets)
             batch_loss = batch_losses.mean()
-
-            
+            if loss_type == 'dice+ce':
+                ce_loss = ce_loss_func(probabilities, targets.detach())
+                batch_loss = batch_loss + ce_loss
+                
             if is_training:
                 batch_loss.backward()
                 optimizer.step()
@@ -337,8 +342,9 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
     
     return epoch_losses 
 
+
 def train(num_epochs, training_loader, validation_loader, model, optimizer, scheduler,
-          weights_stem, save_epoch= 1, experiment= False, verbose = True):
+          weights_stem, save_epoch= 1, experiment= False, verbose = True, loss_type = False):
     
     '''
     Fucntion trains model with set parameters
@@ -354,14 +360,14 @@ def train(num_epochs, training_loader, validation_loader, model, optimizer, sche
     start_time = time.time()
     epoch_train_loss, epoch_val_loss = [], []
     
-    run_epoch(0, Action.VALIDATE, validation_loader, model, optimizer, scheduler, experiment)
+    run_epoch(0, Action.VALIDATE, validation_loader, model, optimizer, scheduler, experiment, loss_type)
     
     for epoch_idx in range(1, num_epochs + 1):
         
         epoch_train_losses = run_epoch(epoch_idx, Action.TRAIN, training_loader, 
-                                       model, optimizer, scheduler, experiment)
+                                       model, optimizer, scheduler, experiment, loss_type)
         epoch_val_losses = run_epoch(epoch_idx, Action.VALIDATE, validation_loader, 
-                                     model, optimizer, scheduler, experiment)
+                                     model, optimizer, scheduler, experiment, loss_type)
         
         # 4. Print metrics
         if verbose:
