@@ -323,6 +323,12 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
             if loss_type == 'dice+ce':
                 ce_loss = ce_loss_func(probabilities, targets.detach())
                 batch_loss = batch_loss + ce_loss
+            if loss_type == 'weighted ce': 
+                weights = targets/2 + 0.5*torch.ones(size = targets.shape).to(device)
+                class_weights = weights.float().to(device)
+                w_ce_loss_func = nn.BCELoss(weight = class_weights)
+                w_ce_loss = w_ce_loss_func(probabilities, targets.detach())
+                batch_loss = w_ce_loss
                 
             if is_training:
                 batch_loss.backward()
