@@ -121,3 +121,39 @@ def get_center_coord_of_bb(img):
 
                         
     return sagital_center_coord, coronal_center_coord, axial_center_coord
+
+
+def plot_predicted(seg, pred, title=""):
+    
+    """
+    Function plots central slices of segmentation and prediction of the model 
+    
+    Arguments:
+        * seg (torch.Tensor): gt segmentation 
+        * pred (torch.Tensor)): prediction of the model 
+        * label (str or False): name of object for which we plot slices, e.g 'brain' or 'bb'
+    
+    Output:
+        * pictures of central slices of gt segmentation and prediction of the model 
+    
+    """
+    if isinstance(seg, torch.Tensor):
+        seg = seg.cpu().numpy()
+        if (len(seg.shape) == 5):
+            seg = seg[0,0,:,:,:]
+        elif (len(seg.shape) == 4):
+            seg = seg[0,:,:,:]
+                
+    elif isinstance(seg, nibabel.nifti1.Nifti1Image):    
+        img = img.get_fdata()
+        
+    if isinstance(seg, torch.Tensor):
+        seg= seg[0].cpu().numpy().astype(np.uint8)
+   
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(3 * 4, 4))
+    axes[0].imshow(img[ img.shape[0] // 2 , :, :])
+    axes[1].imshow(seg[ seg.shape[0] // 2 , :, :])
+    intersect = img[ img.shape[0] // 2, :, :] + seg[ seg.shape[0] // 2 , :, :]*100
+    axes[2].imshow(intersect, cmap='gray')
+    
+    plt.show()
