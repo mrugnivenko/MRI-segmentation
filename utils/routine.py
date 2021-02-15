@@ -118,6 +118,7 @@ def get_loaders(data, cv_split, training_transform = False,
     """
     
     training_idx, validation_idx = cv_split
+    mask = data.mask
     
     print('Training set:', len(training_idx), 'subjects')
     print('Validation set:', len(validation_idx), 'subjects')
@@ -132,7 +133,8 @@ def get_loaders(data, cv_split, training_transform = False,
         list(data.img_seg[validation_idx].values),
         validation_transform)
     
-    if mask:
+    if mask in ['bb', 'combined']:
+        print(f'Mask type is {mask}')
         # if using masked data for training
         training_set = get_torchio_dataset(
             list(data.img_files[training_idx].values), 
