@@ -5,6 +5,7 @@ Description of the following fucntions:
 '''
 
 import torch
+import numpy as np
 
 def get_dice_score(output, target, SPATIAL_DIMENSIONS = (2, 3, 4), epsilon = 1e-9):
     '''
@@ -62,3 +63,21 @@ def get_dice_loss(output, target):
         * dice score loss (torch.tensor): tensor with dice score loss for every class on the image 
     '''
     return 1 - get_dice_score(output, target)
+
+def get_iou_score(prediction, ground_truth):
+    '''
+    Fucntion computes IoU of prediction of target and ground truth target
+    
+    Arguments:
+        * prediction (np.array): predicted segmentation (with or without mask, whatever)
+        * ground_truth (np.array):ground truth segmentation
+    
+    Outputs:
+        * iou_score (float): IoU score 
+    
+    '''
+    intersection, union = 0, 0
+    intersection += np.logical_and(prediction > 0, ground_truth > 0).astype(np.float32).sum() 
+    union += np.logical_or(prediction > 0, ground_truth > 0).astype(np.float32).sum()
+    iou_score = float(intersection) / union
+    return iou_score

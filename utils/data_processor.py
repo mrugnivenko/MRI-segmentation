@@ -260,4 +260,14 @@ class DataMriSegmentation(data.Dataset):
     def __len__(self):
         return len(self.img_files)
 
-
+def get_ration_of_ones(data):
+    
+    '''
+    Function gives ratio of ones in whole data sample to define weighted CE loss 
+    '''
+    
+    ones = 0 
+    for i in range(len(data)):
+        img, seg = data[i]
+        ones += seg[0,:].sum()
+    return int(len(data)*seg.shape[1]*seg.shape[2]*seg.shape[3]/ones.numpy())

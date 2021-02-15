@@ -293,7 +293,7 @@ class Action(enum.Enum):
     TRAIN = 'Training'
     VALIDATE = 'Validation'
 
-def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, experiment = False, loss_type = False):
+def run_epoch(epoch_idx, action, loader, model, optimizer, ratio, scheduler = False, experiment = False, loss_type = False):
     
     '''
     Function runs one epoch with set parameters
@@ -326,7 +326,7 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
                 ce_loss = ce_loss_func(probabilities, targets.detach())
                 batch_loss = batch_loss + ce_loss
             if loss_type == 'weighted ce': 
-                weights = targets/2 + 0.5*torch.ones(size = targets.shape).to(device)
+                weights = targets*ratio + (1-targets)
                 class_weights = weights.float().to(device)
                 w_ce_loss_func = nn.BCELoss(weight = class_weights)
                 w_ce_loss = w_ce_loss_func(probabilities, targets.detach())
@@ -351,7 +351,7 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, scheduler = False, ex
     return epoch_losses 
 
 
-def train(num_epochs, training_loader, validation_loader, model, optimizer, scheduler,
+def train(num_epochs, training_loader, validation_loader, model, optimizer, ratio, scheduler, 
           weights_stem, save_epoch= 1, experiment= False, verbose = True, loss_type = False):
     
     '''
@@ -368,14 +368,14 @@ def train(num_epochs, training_loader, validation_loader, model, optimizer, sche
     start_time = time.time()
     epoch_train_loss, epoch_val_loss = [], []
     
-    run_epoch(0, Action.VALIDATE, validation_loader, model, optimizer, scheduler, experiment, loss_type)
+    run_epoch(0, Action.VALIDATE, validation_loader, model, optimizer, ratio, scheduler, experiment, loss_type)
     
     for epoch_idx in range(1, num_epochs + 1):
         
         epoch_train_losses = run_epoch(epoch_idx, Action.TRAIN, training_loader, 
-                                       model, optimizer, scheduler, experiment, loss_type)
+                                       model, optimizer, ratio, scheduler, experiment, loss_type)
         epoch_val_losses = run_epoch(epoch_idx, Action.VALIDATE, validation_loader, 
-                                     model, optimizer, scheduler, experiment, loss_type)
+                                     model, optimizer, ratio, scheduler, experiment, loss_type)
         
         # 4. Print metrics
         if verbose:
