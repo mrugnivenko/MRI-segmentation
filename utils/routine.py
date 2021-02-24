@@ -321,7 +321,8 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, ratio, scheduler = Fa
             logits = forward(model, inputs)
             probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
             batch_losses = get_dice_loss(probabilities, targets)
-            batch_loss = batch_losses.mean()
+            batch_loss = (batch_losses*torch.tensor([1, 0]).float().to(device)).sum()
+            
             if loss_type == 'dice+ce':
                 ce_loss = ce_loss_func(probabilities, targets.detach())
                 batch_loss = batch_loss + ce_loss
