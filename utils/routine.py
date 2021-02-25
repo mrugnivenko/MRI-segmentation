@@ -233,7 +233,7 @@ def get_model_and_optimizer(device,
     optimizer = torch.optim.AdamW(model.parameters())
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            mode = 'min',
-                                                           factor = 0.1,
+                                                           factor = 0.01,
                                                            patience = patience,
                                                            threshold = 0.01)
     
@@ -308,25 +308,37 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, ratio, scheduler = Fa
     '''
 
     is_training = (action == Action.TRAIN)
-    epoch_losses = []
-    ce_loss_func = nn.BCELoss()
     model.train(is_training) #Sets the module in training mode if is_training = True
     
+    epoch_losses = []
+
     for batch_idx, batch in enumerate(tqdm(loader)):
         inputs, targets = prepare_batch(batch, device)
         targets = targets.float()
         optimizer.zero_grad()
         
         with torch.set_grad_enabled(is_training):
-            logits = forward(model, inputs)
-            probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
-            batch_losses = get_dice_loss(probabilities, targets)
-            batch_loss = (batch_losses*torch.tensor([1, 0]).float().to(device)).sum()
+            if loss_type == 'dice':
+                logits = forward(model, inputs)
+                probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
+                batch_losses = get_dice_loss(probabilities, targets)
+                batch_loss = (batch_losses*torch.tensor([1, 0]).float().to(device)).sum()
             
             if loss_type == 'dice+ce':
+                logits = forward(model, inputs)
+                probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
+                batch_losses = get_dice_loss(probabilities, targets)
+                batch_loss = (batch_losses*torch.tensor([1, 0]).float().to(device)).sum()
+                
+                ce_loss_func = nn.BCELoss()
                 ce_loss = ce_loss_func(probabilities, targets.detach())
                 batch_loss = batch_loss + ce_loss
+                
             if loss_type == 'weighted ce': 
+                ce_loss_func = nn.BCELoss()
+                logits = forward(model, inputs)
+                probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
+                
                 weights = targets*ratio + (1-targets)
                 class_weights = weights.float().to(device)
                 w_ce_loss_func = nn.BCELoss(weight = class_weights)
@@ -341,9 +353,11 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, ratio, scheduler = Fa
            
             if experiment:
                 if action == Action.TRAIN:
-                    experiment.log_metric("train_dice_loss", batch_loss.item())
+                    with experiment.train(): 
+                        experiment.log_metric("train_dice_loss", batch_loss.item())
                 elif action == Action.VALIDATE:
-                    experiment.log_metric("validate_dice_loss", batch_loss.item())
+                    with experiment.test(): 
+                        experiment.log_metric("validate_dice_loss", batch_loss.item())
                     
             del inputs, targets, logits, probabilities, batch_losses
  
