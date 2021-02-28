@@ -343,7 +343,20 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, ratio, scheduler = Fa
                 class_weights = weights.float().to(device)
                 w_ce_loss_func = nn.BCELoss(weight = class_weights)
                 w_ce_loss = w_ce_loss_func(probabilities, targets.detach())
-                batch_loss = w_ce_loss
+                batch_losses = w_ce_loss
+                batch_loss = batch_losses
+                
+            if loss_type == 'ce in target class': 
+                ce_loss_func = nn.BCELoss()
+                logits = forward(model, inputs)
+                probabilities = F.softmax(logits, dim = CHANNELS_DIMENSION)
+                
+                weights = targets
+                class_weights = weights.float().to(device)
+                w_ce_loss_func = nn.BCELoss(weight = class_weights)
+                w_ce_loss = w_ce_loss_func(probabilities, targets.detach())
+                batch_losses = w_ce_loss
+                batch_loss = batch_losses
                 
             if is_training:
                 batch_loss.backward()
