@@ -19,6 +19,9 @@ from sklearn.preprocessing import LabelEncoder
 import torch
 import torch.utils.data as data
 
+LIST_FCD =  [ 8,   10,   11,   12,   13,    16,   17,   18,  26, 31, 47, 49,   50, 
+  51,   52,   53,   54,   58,  85,  251,  252,  253,  254,  255]
+
 
 def load_nii_to_array(nii_path):
     
@@ -231,8 +234,9 @@ class DataMriSegmentation(data.Dataset):
         if self.mask == 'seg':
             # binarising cortical structures
             # GET RID OF CONSTANT
-            seg[seg < 900] = 0
+            seg[np.isin(seg, LIST_FCD)] = 1.
             seg[seg >= 900] = 1
+            seg[seg != 1.] = 0.
             return torch.from_numpy(img).float(), torch.from_numpy(seg).float()
 
         elif self.mask == 'bb':
@@ -245,8 +249,9 @@ class DataMriSegmentation(data.Dataset):
         elif self.mask == 'combined':
             # binarising cortical structures
             # GET RID OF CONSTANT
-            seg[seg < 900] = 0
+            seg[np.isin(seg, LIST_FCD)] = 1.
             seg[seg >= 900] = 1
+            seg[seg != 1.] = 0.
 
             # preparing bounding box mask 
             bb_mask_path = self.img_mask[index]
@@ -271,3 +276,34 @@ def get_ration_of_ones(data):
         img, seg = data[i]
         ones += seg[0,:].sum()
     return int(len(data)*seg.shape[1]*seg.shape[2]*seg.shape[3]/ones.numpy())
+
+
+def create_combined_masks(data, path = '../datasets/ellipse_masks/combined/'):
+    '''
+    Function creates combined masks
+    
+    Argumetns:
+        * data (DataMriSegmentation): 
+        * path (str): path to save masks
+    '''
+    for index in range(len(data)):
+        img_path = data.img_files[index]
+        seg_path = data.img_seg[index]
+        seg_array = load_nii_to_array(seg_path)
+        seg = seg_array
+
+        seg[np.isin(seg, LIST_FCD)] = 1.
+        seg[seg >= 900] = 1
+        seg[seg != 1.] = 0.
+
+        # preparing bounding box mask 
+        bb_mask_path = data.img_mask[index]
+        mask_array = load_nii_to_array(bb_mask_path)
+        masked_img = mask_array
+        
+        img1 = nib.load(img_path)
+        affine = img1.affine
+        # calculating combined mask as intersection of both masks
+        comb_mask = np.logical_and(masked_img, seg)
+        new_image = nib.Nifti1Image(comb_mask.astype(float), affine)
+        nib.save(new_image, path+img_path.split('/')[-1].split('_norm')[0]+'.nii.gz')

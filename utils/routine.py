@@ -258,8 +258,8 @@ def prepare_batch(batch, device):
     inputs = batch['MRI'][DATA].to(device)
     targets = batch['LABEL'][DATA]
     targets[0][0][(np.isin(targets[0][0], LIST_FCD))] = 1 # WHAT!??
-    targets[targets >= 900] = 1 #GET RID OF CONCSTANT
-    targets[targets != 1] = 0
+    targets[targets >= 900] = 1.0 #GET RID OF CONCSTANT
+    targets[targets != 1] = 0.0
     targets_2_dim = torch.stack((targets[0][0] , 1 - targets[0][0])) #WORKS ONLY IF BATCH_SIZE = 1
     targets_2_dim = targets_2_dim.unsqueeze(0)
     targets_2_dim = targets_2_dim.to(device)   
