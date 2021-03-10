@@ -93,7 +93,7 @@ def get_loaders(data, cv_split, training_transform = False,
         validation_transform = False, patch_size = 64,
         patches = False, samples_per_volume = 6,
         max_queue_length = 180, training_batch_size = 1,
-        validation_batch_size = 1, mask = False):
+        validation_batch_size = 1, mask = False, input_type = 'T1'):
     
     """
     Function creates dataloaders 
@@ -122,35 +122,57 @@ def get_loaders(data, cv_split, training_transform = False,
     
     print('Training set:', len(training_idx), 'subjects')
     print('Validation set:', len(validation_idx), 'subjects')
+    print(f'Input type is {input_type}')
     
-    training_set = get_torchio_dataset(
-        list(data.img_files[training_idx].values), 
-        list(data.img_seg[training_idx].values),
-        training_transform)
-    
-    validation_set = get_torchio_dataset(
-        list(data.img_files[validation_idx].values), 
-        list(data.img_seg[validation_idx].values),
-        validation_transform)
-    
-    if mask in ['bb', 'combined']:
-        print(f'Mask type is {mask}')
-        # if using masked data for training
+    if input_type == 'T1':
         training_set = get_torchio_dataset(
             list(data.img_files[training_idx].values), 
-            list(data.img_mask[training_idx].values),
+            list(data.img_seg[training_idx].values),
             training_transform)
-        
+
         validation_set = get_torchio_dataset(
             list(data.img_files[validation_idx].values), 
-            list(data.img_mask[validation_idx].values),
+            list(data.img_seg[validation_idx].values),
             validation_transform)
-    
-    training_loader = torch.utils.data.DataLoader(
-        training_set, batch_size = training_batch_size)
 
-    validation_loader = torch.utils.data.DataLoader(
-        validation_set, batch_size = validation_batch_size)
+        if mask in ['bb', 'combined']:
+            print(f'Mask type is {mask}')
+            # if using masked data for training
+            training_set = get_torchio_dataset(
+                list(data.img_files[training_idx].values), 
+                list(data.img_mask[training_idx].values),
+                training_transform)
+
+            validation_set = get_torchio_dataset(
+                list(data.img_files[validation_idx].values), 
+                list(data.img_mask[validation_idx].values),
+                validation_transform)
+
+        training_loader = torch.utils.data.DataLoader(
+            training_set, batch_size = training_batch_size)
+
+        validation_loader = torch.utils.data.DataLoader(
+            validation_set, batch_size = validation_batch_size)
+         
+    if input_type == 'seg_to_fcd':
+        if mask in ['bb', 'combined']:
+            print(f'Mask type is {mask}')
+            # if using masked data for training
+            training_set = get_torchio_dataset(
+                list(data.img_seg[training_idx].values), 
+                list(data.img_mask[training_idx].values),
+                training_transform)
+
+            validation_set = get_torchio_dataset(
+                list(data.img_seg[validation_idx].values), 
+                list(data.img_mask[validation_idx].values),
+                validation_transform)
+
+        training_loader = torch.utils.data.DataLoader(
+            training_set, batch_size = training_batch_size)
+
+        validation_loader = torch.utils.data.DataLoader(
+            validation_set, batch_size = validation_batch_size)
     
     if patches:
         # https://niftynet.readthedocs.io/en/dev/window_sizes.html - about patch based training
@@ -366,11 +388,9 @@ def run_epoch(epoch_idx, action, loader, model, optimizer, ratio, scheduler = Fa
            
             if experiment:
                 if action == Action.TRAIN:
-                    with experiment.train(): 
-                        experiment.log_metric("train_dice_loss", batch_loss.item())
+                    experiment.log_metric("train_dice_loss", batch_loss.item())
                 elif action == Action.VALIDATE:
-                    with experiment.test(): 
-                        experiment.log_metric("validate_dice_loss", batch_loss.item())
+                    experiment.log_metric("validate_dice_loss", batch_loss.item())
                     
             del inputs, targets, logits, probabilities, batch_losses
  
@@ -396,12 +416,15 @@ def train(num_epochs, training_loader, validation_loader, model, optimizer, rati
     start_time = time.time()
     epoch_train_loss, epoch_val_loss = [], []
     
+
     run_epoch(0, Action.VALIDATE, validation_loader, model, optimizer, ratio, scheduler, experiment, loss_type)
     
     for epoch_idx in range(1, num_epochs + 1):
         
+
         epoch_train_losses = run_epoch(epoch_idx, Action.TRAIN, training_loader, 
                                        model, optimizer, ratio, scheduler, experiment, loss_type)
+  
         epoch_val_losses = run_epoch(epoch_idx, Action.VALIDATE, validation_loader, 
                                      model, optimizer, ratio, scheduler, experiment, loss_type)
         
